@@ -478,15 +478,18 @@ void pw_filter_update(void *data, obs_data_t *settings)
 	const char *sender_name = obs_data_get_string(settings, FILTER_PROP_NAME);
 	
 	if(context->is_initialised && strcmp(context->ssender_name.c_str(), sender_name)){
-		pthread_mutex_lock(&context->mutex);
+		pw_thread_loop_lock(context->loop);
 		blog(LOG_INFO, "[pipewire filter] changing name is triggered");
 		pw_stream_set_active(context->stream, false);
+		pw_stream_destroy(context->stream);
+		context->stream = NULL;
+		pthread_mutex_lock(&context->mutex);
 		context->sender_name = sender_name;
 		context->ssender_name = std::string(context->sender_name);
 		context->is_changed = true;
-		pw_stream_disconnect(context->stream);
-		create_pw_stream(context);
 		pthread_mutex_unlock(&context->mutex);
+		create_pw_stream(context);
+		pw_thread_loop_unlock(context->loop);
 	}
 	
 	obs_add_main_render_callback(pw_offscreen_render, context);
@@ -530,10 +533,8 @@ void *pw_filter_create(obs_data_t *settings, obs_source_t *source)
 	std::string pw_name = "spout:" + context->ssender_name;
 	context->loop = pw_thread_loop_new(pw_name.c_str(), NULL);
 	context->context = pw_context_new(pw_thread_loop_get_loop(context->loop), NULL, 0);
-	pw_thread_loop_start(context->loop);
-	pw_thread_loop_lock(context->loop);
 	context->core = pw_context_connect(context->context, NULL, 0);
-	pw_thread_loop_unlock(context->loop);
+	pw_thread_loop_start(context->loop);
 	
 	pw_filter_update(context, settings);
 
