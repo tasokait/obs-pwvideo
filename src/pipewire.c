@@ -184,6 +184,7 @@ struct _obs_pipewire_stream {
 	struct crop_info crop;
 	enum spa_meta_videotransform_value transform;
 	uint32_t width, height;
+	unsigned int opacitymode;
 };
 
 /* auxiliary methods */
@@ -1828,6 +1829,19 @@ void obs_pipewire_stream_video_render(obs_pipewire_stream *obs_pw_stream, gs_eff
 		gs_sync_destroy(acquire_sync);
 	}
 
+	switch(obs_pw_stream->opacitymode){
+		case 0:{
+			effect = obs_get_base_effect(OBS_EFFECT_DEFAULT);
+			gs_blend_state_push();
+			gs_blend_function(GS_BLEND_ONE, GS_BLEND_INVSRCALPHA);
+			break;
+		}
+		case 1:{
+			effect = obs_get_base_effect(OBS_EFFECT_OPAQUE);
+			break;
+		}
+	}
+
 	image = gs_effect_get_param_by_name(effect, "image");
 	gs_effect_set_texture(image, texture);
 
@@ -1835,27 +1849,25 @@ void obs_pipewire_stream_video_render(obs_pipewire_stream *obs_pw_stream, gs_eff
 
 	flip = get_buffer_flip(obs_pw_stream);
 
-	/* There is a SPA_VIDEO_FLAG_PREMULTIPLIED_ALPHA flag, but it does not
-	 * seem to be fully implemented nor ever set. Just assume premultiplied
-	 * always, which seems to be the default convention.
-	 *
-	 * See https://gitlab.freedesktop.org/pipewire/pipewire/-/issues/3126
-	 *
-	 * The cursor bitmap alpha mode is also not specified, and the
-	 * convention there also seems to be premultiplied. */
-	gs_blend_state_push();
-	gs_blend_function(GS_BLEND_ONE, GS_BLEND_INVSRCALPHA);
 
 	if (has_effective_crop(obs_pw_stream)) {
-		gs_draw_sprite_subregion(texture, flip, pb->crop.x, pb->crop.y, pb->crop.width, pb->crop.height);
+		while(gs_effect_loop(effect, "Draw")){
+			gs_draw_sprite_subregion(texture, flip, pb->crop.x, pb->crop.y, pb->crop.width, pb->crop.height);
+		}
 	} else {
-		gs_draw_sprite(texture, flip, 0, 0);
+		while(gs_effect_loop(effect, "Draw")){
+			gs_draw_sprite(texture, flip, 0, 0);
+		}
 	}
 
 	if (rotated)
 		gs_matrix_pop();
 
+	if(obs_pw_stream->opacitymode)
+		gs_blend_state_push();
+
 	if (obs_pw_stream->cursor_visible && pb->cursor.valid && pb->cursor.texture) {
+		gs_effect_t *cu_effect = obs_get_base_effect(OBS_EFFECT_DEFAULT);
 		float cursor_x = pb->cursor.x - pb->cursor.hotspot_x;
 		float cursor_y = pb->cursor.y - pb->cursor.hotspot_y;
 
@@ -1863,11 +1875,12 @@ void obs_pipewire_stream_video_render(obs_pipewire_stream *obs_pw_stream, gs_eff
 		gs_matrix_translate3f(cursor_x, cursor_y, 0.0f);
 
 		gs_effect_set_texture(image, pb->cursor.texture);
-		gs_draw_sprite(pb->cursor.texture, 0, pb->cursor.width, pb->cursor.height);
+		while(gs_effect_loop(cu_effect, "Draw")){
+			gs_draw_sprite(pb->cursor.texture, 0, pb->cursor.width, pb->cursor.height);
+		}
 
 		gs_matrix_pop();
 	}
-
 	gs_blend_state_pop();
 
 	if (pb->sync.set) {
@@ -1895,6 +1908,11 @@ void obs_pipewire_stream_set_cursor_visible(obs_pipewire_stream *obs_pw_stream, 
 void obs_pipewire_stream_set_double_buffering(obs_pipewire_stream *obs_pw_stream, bool double_buffering)
 {
 	obs_pw_stream->double_buffering = double_buffering;
+}
+
+void obs_pipewire_stream_set_opaque_opacity(obs_pipewire_stream *obs_pw_stream, bool opaque_opacity)
+{
+	obs_pw_stream->opacitymode = opaque_opacity;
 }
 
 void obs_pipewire_stream_destroy(obs_pipewire_stream *obs_pw_stream)

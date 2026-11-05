@@ -58,6 +58,7 @@ struct pipewire_video_capture {
 
 	uint32_t pipewire_node;
 	bool double_buffering;
+	bool opaque_opacity;
 
 	obs_pipewire *obs_pw;
 	obs_pipewire_stream *obs_pw_stream;
@@ -329,6 +330,7 @@ static void *pipewire_video_capture_create(obs_data_t *settings, obs_source_t *s
 				.cursor_visible = false,
 			},
 		.double_buffering = capture->double_buffering,
+		.opaque_opacity = capture->opaque_opacity,
 	};
 
 	dstr_free(&node_name);
@@ -540,6 +542,7 @@ static obs_properties_t *pipewire_video_capture_get_properties(void *data)
 	obs_property_set_modified_callback2(source_list, source_selected, capture);
 
 	obs_properties_add_bool(props, "DoubleBuffering", obs_module_text("DoubleBuffering"));
+	obs_properties_add_bool(props, "OpaqueOpacity", obs_module_text("OpaqueOpacity"));
 
 	blog(LOG_INFO, "[pwvideo] props %p", props);
 	return props;
@@ -551,9 +554,11 @@ static void pipewire_video_capture_update(void *data, obs_data_t *settings)
 	struct pipewire_video_capture *capture = data;
 
 	capture->double_buffering = obs_data_get_bool(settings, "DoubleBuffering");
+	capture->opaque_opacity = obs_data_get_bool(settings, "OpaqueOpacity");
 
 	if (capture->obs_pw_stream)
 		obs_pipewire_stream_set_double_buffering(capture->obs_pw_stream, capture->double_buffering);
+		obs_pipewire_stream_set_opaque_opacity(capture->obs_pw_stream, capture->opaque_opacity);
 }
 
 static void pipewire_video_capture_show(void *data)
@@ -614,7 +619,7 @@ void pipewire_video_load(void)
 	const struct obs_source_info pipewire_video_capture_info = {
 		.id = "pipewire-video-source",
 		.type = OBS_SOURCE_TYPE_INPUT,
-		.output_flags = OBS_SOURCE_VIDEO,
+		.output_flags = OBS_SOURCE_VIDEO | OBS_SOURCE_CUSTOM_DRAW,
 		.get_name = pipewire_video_capture_get_name,
 		.create = pipewire_video_capture_create,
 		.destroy = pipewire_video_capture_destroy,
