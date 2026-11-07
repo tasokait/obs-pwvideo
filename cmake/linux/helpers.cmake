@@ -81,6 +81,9 @@ function(target_install_resources target)
       COMMAND
         "${CMAKE_COMMAND}" -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/data"
         "${CMAKE_CURRENT_BINARY_DIR}/rundir/$<CONFIG>/${target}"
+      COMMAND
+        "${CMAKE_COMMAND}" -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/helpers"
+        "${CMAKE_CURRENT_BINARY_DIR}/rundir/$<CONFIG>/"
       COMMENT "Copy ${target} resources to rundir"
       VERBATIM
     )
