@@ -58,7 +58,7 @@ struct pipewire_video_capture {
 
 	uint32_t pipewire_node;
 	bool double_buffering;
-	bool opaque_opacity;
+	unsigned int opacity_mode;
 
 	obs_pipewire *obs_pw;
 	obs_pipewire_stream *obs_pw_stream;
@@ -325,7 +325,7 @@ static void *pipewire_video_capture_create(obs_data_t *settings, obs_source_t *s
 			NULL
 		),
 		.double_buffering = capture->double_buffering,
-		.opaque_opacity = capture->opaque_opacity,
+		.opacity_mode = capture->opacity_mode,
 	};
 
 	dstr_free(&node_name);
@@ -387,6 +387,7 @@ static void pipewire_video_capture_destroy(void *data)
 static void pipewire_video_capture_get_defaults(obs_data_t *settings)
 {
 	obs_data_set_default_string(settings, "target", NULL);
+	obs_data_set_default_int(settings, "opacitymode", 3);
 }
 
 static ssize_t find_target(struct pipewire_video_capture *capture, const char *target_name)
@@ -537,7 +538,13 @@ static obs_properties_t *pipewire_video_capture_get_properties(void *data)
 	obs_property_set_modified_callback2(source_list, source_selected, capture);
 
 	obs_properties_add_bool(props, "DoubleBuffering", obs_module_text("DoubleBuffering"));
-	obs_properties_add_bool(props, "OpaqueOpacity", obs_module_text("OpaqueOpacity"));
+
+	obs_property_t *composite_mode_list = obs_properties_add_list(props, "opacitymode", obs_module_text("opacitymode"), OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_INT);
+	obs_property_list_add_int(composite_mode_list, obs_module_text("compositemodepremultiplied"),0);
+	obs_property_list_add_int(composite_mode_list, obs_module_text("compositemodeopaque"), 1);
+	obs_property_list_add_int(composite_mode_list, obs_module_text("compositemodealpha"), 2);
+	obs_property_list_add_int(composite_mode_list, obs_module_text("compositemodedefault"), 3);
+	//obs_properties_add_bool(props, "OpaqueOpacity", obs_module_text("OpaqueOpacity"));
 
 	blog(LOG_INFO, "[pwvideo] props %p", props);
 	return props;
@@ -549,11 +556,10 @@ static void pipewire_video_capture_update(void *data, obs_data_t *settings)
 	struct pipewire_video_capture *capture = data;
 
 	capture->double_buffering = obs_data_get_bool(settings, "DoubleBuffering");
-	capture->opaque_opacity = obs_data_get_bool(settings, "OpaqueOpacity");
-
+	capture->opacity_mode  =obs_data_get_int(settings, "opacitymode");
 	if (capture->obs_pw_stream)
 		obs_pipewire_stream_set_double_buffering(capture->obs_pw_stream, capture->double_buffering);
-		obs_pipewire_stream_set_opaque_opacity(capture->obs_pw_stream, capture->opaque_opacity);
+		obs_pipewire_stream_set_opacity_mode(capture->obs_pw_stream, capture->opacity_mode);
 }
 
 static void pipewire_video_capture_show(void *data)

@@ -32,7 +32,7 @@ struct obs_pipwire_connect_stream_info {
 	const char *stream_target;
 	struct pw_properties *stream_properties;
 	bool double_buffering;
-	bool opaque_opacity;
+	unsigned int opacity_mode;
 	struct {
 		const struct spa_rectangle *resolution;
 		const struct spa_fraction *framerate;
@@ -57,7 +57,7 @@ void obs_pipewire_stream_video_render(obs_pipewire_stream *obs_pw_stream, gs_eff
 void obs_pipewire_stream_video_tick(obs_pipewire_stream *obs_pw_stream, float seconds);
 
 void obs_pipewire_stream_set_double_buffering(obs_pipewire_stream *obs_pw_stream, bool double_buffering);
-void obs_pipewire_stream_set_opaque_opacity(obs_pipewire_stream *obs_pw_stream, bool opaque_opacity);
+void obs_pipewire_stream_set_opacity_mode(obs_pipewire_stream *obs_pw_stream, unsigned int opacity_mode);
 void obs_pipewire_stream_destroy(obs_pipewire_stream *obs_pw_stream);
 
 void obs_pipewire_stream_set_framerate(obs_pipewire_stream *obs_pw_stream, const struct spa_fraction *framerate);

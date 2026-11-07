@@ -172,7 +172,7 @@ struct _obs_pipewire_stream {
 	struct crop_info crop;
 	enum spa_meta_videotransform_value transform;
 	uint32_t width, height;
-	unsigned int opacitymode;
+	unsigned int opacity_mode;
 };
 
 /* auxiliary methods */
@@ -1756,15 +1756,27 @@ void obs_pipewire_stream_video_render(obs_pipewire_stream *obs_pw_stream, gs_eff
 		gs_sync_destroy(acquire_sync);
 	}
 
-	switch(obs_pw_stream->opacitymode){
+	switch(obs_pw_stream->opacity_mode){
+		//pre-multiplied
 		case 0:{
 			effect = obs_get_base_effect(OBS_EFFECT_DEFAULT);
 			gs_blend_state_push();
 			gs_blend_function(GS_BLEND_ONE, GS_BLEND_INVSRCALPHA);
 			break;
 		}
+		//opaque
 		case 1:{
 			effect = obs_get_base_effect(OBS_EFFECT_OPAQUE);
+			break;
+		}
+		//converted pre-multiplied to alpha
+		case 2:{
+			effect = obs_get_base_effect(OBS_EFFECT_PREMULTIPLIED_ALPHA); // Converts premultiplied to regular alpha before blending it as regular transparency.
+			break;
+		}
+		//obs default
+		case 3:{
+			effect = obs_get_base_effect(OBS_EFFECT_DEFAULT);
 			break;
 		}
 	}
@@ -1790,7 +1802,7 @@ void obs_pipewire_stream_video_render(obs_pipewire_stream *obs_pw_stream, gs_eff
 	if (rotated)
 		gs_matrix_pop();
 
-	if(!obs_pw_stream->opacitymode)
+	if(!obs_pw_stream->opacity_mode)
 		gs_blend_state_pop();
 
 	if (pb->sync.set) {
@@ -1815,9 +1827,9 @@ void obs_pipewire_stream_set_double_buffering(obs_pipewire_stream *obs_pw_stream
 	obs_pw_stream->double_buffering = double_buffering;
 }
 
-void obs_pipewire_stream_set_opaque_opacity(obs_pipewire_stream *obs_pw_stream, bool opaque_opacity)
+void obs_pipewire_stream_set_opacity_mode(obs_pipewire_stream *obs_pw_stream, unsigned int opacity_mode)
 {
-	obs_pw_stream->opacitymode = opaque_opacity;
+	obs_pw_stream->opacity_mode = opacity_mode;
 }
 
 void obs_pipewire_stream_destroy(obs_pipewire_stream *obs_pw_stream)
