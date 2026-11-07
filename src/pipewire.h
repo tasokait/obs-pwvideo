@@ -34,9 +34,6 @@ struct obs_pipwire_connect_stream_info {
 	bool double_buffering;
 	bool opaque_opacity;
 	struct {
-		bool cursor_visible;
-	} screencast;
-	struct {
 		const struct spa_rectangle *resolution;
 		const struct spa_fraction *framerate;
 	} video;
@@ -59,7 +56,6 @@ uint32_t obs_pipewire_stream_get_height(obs_pipewire_stream *obs_pw_stream);
 void obs_pipewire_stream_video_render(obs_pipewire_stream *obs_pw_stream, gs_effect_t *effect);
 void obs_pipewire_stream_video_tick(obs_pipewire_stream *obs_pw_stream, float seconds);
 
-void obs_pipewire_stream_set_cursor_visible(obs_pipewire_stream *obs_pw_stream, bool cursor_visible);
 void obs_pipewire_stream_set_double_buffering(obs_pipewire_stream *obs_pw_stream, bool double_buffering);
 void obs_pipewire_stream_set_opaque_opacity(obs_pipewire_stream *obs_pw_stream, bool opaque_opacity);
 void obs_pipewire_stream_destroy(obs_pipewire_stream *obs_pw_stream);

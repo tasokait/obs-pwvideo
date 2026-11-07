@@ -324,11 +324,6 @@ static void *pipewire_video_capture_create(obs_data_t *settings, obs_source_t *s
 			PW_KEY_NODE_SUPPORTS_REQUEST, "1",
 			NULL
 		),
-		// clang-format on
-		.screencast =
-			{
-				.cursor_visible = false,
-			},
 		.double_buffering = capture->double_buffering,
 		.opaque_opacity = capture->opaque_opacity,
 	};

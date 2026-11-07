@@ -66,9 +66,6 @@ struct spa_meta_videotransform {
 };
 #endif
 
-#define CURSOR_META_SIZE(width, height) \
-	(sizeof(struct spa_meta_cursor) + sizeof(struct spa_meta_bitmap) + width * height * 4)
-
 struct obs_pw_version {
 	int major;
 	int minor;
@@ -122,14 +119,6 @@ struct present_buffer {
 	struct crop_info crop;
 
 	struct {
-		bool valid;
-		int x, y;
-		int hotspot_x, hotspot_y;
-		int width, height;
-		gs_texture_t *texture;
-	} cursor;
-
-	struct {
 		int acquire_syncobj_fd;
 		int release_syncobj_fd;
 		uint64_t acquire_point;
@@ -167,7 +156,6 @@ struct _obs_pipewire_stream {
 
 	bool active;
 	bool double_buffering;
-	bool cursor_visible;
 
 	struct {
 		struct spa_rectangle rect;
@@ -1006,7 +994,6 @@ static void import_dmabuf(obs_pipewire_stream *obs_pw_stream, struct pw_buffer *
 static void prepare_sync_buffer(obs_pipewire_stream *obs_pw_stream, struct present_buffer *pb)
 {
 	obs_pipewire *obs_pw = obs_pw_stream->obs_pw;
-	struct spa_meta_cursor *cursor;
 	struct spa_meta_region *region;
 	struct spa_meta_videotransform *video_transform;
 	struct obs_pw_video_format obs_pw_video_format;
@@ -1136,40 +1123,6 @@ static void prepare_sync_buffer(obs_pipewire_stream *obs_pw_stream, struct prese
 		pb->transform = SPA_META_TRANSFORMATION_None;
 
 read_metadata:
-
-	/* Cursor */
-	cursor = spa_buffer_find_meta_data(buffer, SPA_META_Cursor, sizeof(*cursor));
-	pb->cursor.valid = cursor && spa_meta_cursor_is_valid(cursor);
-	if (obs_pw_stream->cursor_visible && pb->cursor.valid) {
-		struct spa_meta_bitmap *bitmap = NULL;
-
-		if (cursor->bitmap_offset)
-			bitmap = SPA_MEMBER(cursor, cursor->bitmap_offset, struct spa_meta_bitmap);
-
-		if (bitmap && bitmap->size.width > 0 && bitmap->size.height > 0 &&
-		    obs_pw_video_format_from_spa_format(bitmap->format, &obs_pw_video_format) &&
-		    obs_pw_video_format.gs_format != GS_UNKNOWN) {
-			const uint8_t *bitmap_data;
-
-			bitmap_data = SPA_MEMBER(bitmap, bitmap->offset, uint8_t);
-			pb->cursor.hotspot_x = cursor->hotspot.x;
-			pb->cursor.hotspot_y = cursor->hotspot.y;
-			pb->cursor.width = bitmap->size.width;
-			pb->cursor.height = bitmap->size.height;
-
-			assert(pb->cursor.texture == NULL);
-			pb->cursor.texture = gs_texture_create(pb->cursor.width, pb->cursor.height,
-							       obs_pw_video_format.gs_format, 1, &bitmap_data,
-							       GS_DYNAMIC);
-
-			if (obs_pw_video_format.swap_red_blue)
-				swap_texture_red_blue(pb->cursor.texture);
-		}
-
-		pb->cursor.x = cursor->position.x;
-		pb->cursor.y = cursor->position.y;
-	}
-
 	pb->state = BUFFER_FULL;
 }
 
@@ -1179,9 +1132,6 @@ static void destroy_buffer(obs_pipewire_stream *obs_pw_stream, struct present_bu
 
 	if (pb->texture)
 		gs_texture_destroy(pb->texture);
-
-	if (pb->cursor.texture)
-		gs_texture_destroy(pb->cursor.texture);
 
 	if (pb->buf) {
 		blog(LOG_DEBUG, "[pipewire] return buffer");
@@ -1205,21 +1155,6 @@ static void pop_buffer(obs_pipewire_stream *obs_pw_stream, struct present_buffer
 		memset(next, 0, sizeof(*next));
 
 		obs_leave_graphics();
-		return;
-	}
-
-	// If the next buffer does not have a texture but does have a cursor,
-	// this is a buffer without data (cursor only)
-	if (next->state != BUFFER_FREE && next->cursor.texture && !next->texture) {
-		// PipeWire buffer should never be held for cursor-only updates
-		assert(!next->buf);
-		if (cur->cursor.texture) {
-			gs_texture_destroy(cur->cursor.texture);
-		}
-		cur->cursor = next->cursor;
-		memset(next, 0, sizeof(*next));
-		obs_leave_graphics();
-		blog(LOG_DEBUG, "[pipewire] buffer was cursor");
 		return;
 	}
 
@@ -1372,13 +1307,6 @@ static void on_param_changed_cb(void *user_data, uint32_t id, const struct spa_p
 							SPA_PARAM_META_type, SPA_POD_Id(SPA_META_VideoCrop),
 							SPA_PARAM_META_size,
 							SPA_POD_Int(sizeof(struct spa_meta_region)));
-
-	/* Cursor */
-	params[n_params++] =
-		spa_pod_builder_add_object(&pod_builder, SPA_TYPE_OBJECT_ParamMeta, SPA_PARAM_Meta, SPA_PARAM_META_type,
-					   SPA_POD_Id(SPA_META_Cursor), SPA_PARAM_META_size,
-					   SPA_POD_CHOICE_RANGE_Int(CURSOR_META_SIZE(64, 64), CURSOR_META_SIZE(1, 1),
-								    CURSOR_META_SIZE(1024, 1024)));
 
 	/* Buffer options */
 #if PW_CHECK_VERSION(1, 2, 0)
@@ -1621,7 +1549,6 @@ obs_pipewire_stream *obs_pipewire_connect_stream(obs_pipewire *obs_pw, obs_sourc
 	obs_pw_stream->target = bstrdup(connect_info->stream_target);
 	obs_pw_stream->obs_pw = obs_pw;
 	obs_pw_stream->source = source;
-	obs_pw_stream->cursor_visible = connect_info->screencast.cursor_visible;
 	obs_pw_stream->double_buffering = connect_info->double_buffering;
 	obs_pw_stream->framerate.set = connect_info->video.framerate != NULL;
 	obs_pw_stream->resolution.set = connect_info->video.resolution != NULL;
@@ -1863,25 +1790,8 @@ void obs_pipewire_stream_video_render(obs_pipewire_stream *obs_pw_stream, gs_eff
 	if (rotated)
 		gs_matrix_pop();
 
-	if(obs_pw_stream->opacitymode)
-		gs_blend_state_push();
-
-	if (obs_pw_stream->cursor_visible && pb->cursor.valid && pb->cursor.texture) {
-		gs_effect_t *cu_effect = obs_get_base_effect(OBS_EFFECT_DEFAULT);
-		float cursor_x = pb->cursor.x - pb->cursor.hotspot_x;
-		float cursor_y = pb->cursor.y - pb->cursor.hotspot_y;
-
-		gs_matrix_push();
-		gs_matrix_translate3f(cursor_x, cursor_y, 0.0f);
-
-		gs_effect_set_texture(image, pb->cursor.texture);
-		while(gs_effect_loop(cu_effect, "Draw")){
-			gs_draw_sprite(pb->cursor.texture, 0, pb->cursor.width, pb->cursor.height);
-		}
-
-		gs_matrix_pop();
-	}
-	gs_blend_state_pop();
+	if(!obs_pw_stream->opacitymode)
+		gs_blend_state_pop();
 
 	if (pb->sync.set) {
 		gs_sync_t *release_sync = gs_sync_create();
@@ -1898,11 +1808,6 @@ void obs_pipewire_stream_video_tick(obs_pipewire_stream *obs_pw_stream, float se
 {
 	UNUSED_PARAMETER(seconds);
 	obs_pw_stream->new_frame = true;
-}
-
-void obs_pipewire_stream_set_cursor_visible(obs_pipewire_stream *obs_pw_stream, bool cursor_visible)
-{
-	obs_pw_stream->cursor_visible = cursor_visible;
 }
 
 void obs_pipewire_stream_set_double_buffering(obs_pipewire_stream *obs_pw_stream, bool double_buffering)
