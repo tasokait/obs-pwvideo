@@ -85,7 +85,7 @@ To use this project on NixOS or by using the nix package manager, follow the fol
 
     ```nix
     inputs.obs-pwvideo = {
-      url = "github:tasokait/obs-pwvideo";
+      url = "git+https://github.com/tasokait/obs-pwvideo.git?ref=0.3.x";
       inputs.nixpkgs.follows = "nixpkgs";
     };
     ```
