@@ -1,7 +1,6 @@
 # OBS PipeWire Video Source
 
-[![Github-sponsors](https://img.shields.io/github/sponsors/hoshinolina?label=Sponsor&logo=GitHub)](https://lina.yt/sponsor)
-[![Ko-Fi](https://shields.io/badge/ko--fi-Tip-ff5f5f?logo=ko-fi)](https://lina.yt/kofi)
+[![buy me a coffee](https://img.shields.io/badge/buy_me_a-coffee-orange)](https://buymeacoffee.com/kaitsukitai)
 
 **If you like this, please help support me with the links above!**
 
